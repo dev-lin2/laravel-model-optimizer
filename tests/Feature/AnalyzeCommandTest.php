@@ -57,4 +57,12 @@ class AnalyzeCommandTest extends TestCase
         $this->assertContains($exitCode, [0, 1]);
         $this->assertStringContainsString('Health Score', $output);
     }
+
+    /** @test */
+    public function it_displays_model_progress_in_debug_mode()
+    {
+        [$exitCode, $output] = $this->captureArtisanOutput('model-analyzer:analyze', ['--debug' => true]);
+        $this->assertContains($exitCode, [0, 1]);
+        $this->assertStringContainsString('Analyzing model:', $output);
+    }
 }

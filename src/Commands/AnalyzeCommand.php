@@ -12,6 +12,7 @@ class AnalyzeCommand extends Command
     protected $signature = 'model-analyzer:analyze
                             {--strict          : Exit with non-zero code if any issues are found}
                             {--format=cli      : Output format: cli or json}
+                            {--debug           : Print model-by-model progress for troubleshooting}
                             {--models=         : Comma-separated list of model names to analyze}
                             {--tables=         : Comma-separated list of tables to analyze}';
 
@@ -28,17 +29,23 @@ class AnalyzeCommand extends Command
     {
         $onlyModels = $this->parseCommaSeparated($this->option('models'));
         $format = strtolower($this->option('format'));
+        $debug = (bool) $this->option('debug');
         $result = null;
+        $progress = $debug ? function ($event, array $payload = []) {
+            if ($event === 'model_start') {
+                $this->line(sprintf('Analyzing model: %s', $payload['class']));
+            }
+        } : null;
 
         if ($format === 'json') {
-            $result = $analyzer->analyze($onlyModels ?: null);
+            $result = $analyzer->analyze($onlyModels ?: null, $progress);
         } else {
             $this->newLine();
             $this->info('Scanning models and analyzing relationships...');
             $startedAt = microtime(true);
 
             try {
-                $result = $analyzer->analyze($onlyModels ?: null);
+                $result = $analyzer->analyze($onlyModels ?: null, $progress);
             } catch (\Throwable $e) {
                 $this->error('Analysis failed: ' . $e->getMessage());
                 return 1;

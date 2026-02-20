@@ -43,9 +43,10 @@ class ModelAnalyzer
      * Run a full analysis and return the populated AnalysisResult.
      *
      * @param string[]|null $onlyModels  Optional allowlist of short/FQ model names
+     * @param callable|null $progress Optional callback receiving ($event, $payload)
      * @return AnalysisResult
      */
-    public function analyze($onlyModels = null)
+    public function analyze($onlyModels = null, $progress = null)
     {
         $result = new AnalysisResult();
 
@@ -62,9 +63,20 @@ class ModelAnalyzer
             $classes = $this->filterClasses($classes, $onlyModels);
         }
 
+        if (is_callable($progress)) {
+            $progress('scan_complete', ['models' => count($classes)]);
+        }
+
         // 2. Build ModelInfo objects
         foreach ($classes as $class) {
             $shortName = class_basename($class);
+
+            if (is_callable($progress)) {
+                $progress('model_start', [
+                    'class' => $class,
+                    'short_name' => $shortName,
+                ]);
+            }
 
             try {
                 $reflection    = new \ReflectionClass($class);
@@ -98,6 +110,14 @@ class ModelAnalyzer
                         ]
                     ));
                 }
+
+                if (is_callable($progress)) {
+                    $progress('model_done', [
+                        'class' => $class,
+                        'short_name' => $shortName,
+                        'relationships' => count($relationships),
+                    ]);
+                }
             } catch (\Throwable $e) {
                 $result->addIssue(new Issue(
                     'model_analysis_error',
@@ -111,6 +131,14 @@ class ModelAnalyzer
                     'Check constructor/property initialization and relationship methods for this model.',
                     ['model' => $class]
                 ));
+
+                if (is_callable($progress)) {
+                    $progress('model_error', [
+                        'class' => $class,
+                        'short_name' => $shortName,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
 
                 continue;
             }

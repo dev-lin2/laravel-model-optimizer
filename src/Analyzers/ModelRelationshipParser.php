@@ -9,6 +9,9 @@ use Devlin\ModelAnalyzer\Models\RelationshipInfo;
 
 class ModelRelationshipParser
 {
+    /** @var array<int, array<string, string>> */
+    private $parseErrors = [];
+
     /**
      * Short class names of all known Eloquent relation types.
      *
@@ -36,6 +39,7 @@ class ModelRelationshipParser
      */
     public function parse($modelClass)
     {
+        $this->parseErrors = [];
         $relationships = [];
 
         try {
@@ -144,8 +148,26 @@ class ModelRelationshipParser
                 $line
             );
         } catch (\Throwable $e) {
+            $this->parseErrors[] = [
+                'model' => $modelClass,
+                'method' => $method->getName(),
+                'error' => $e->getMessage(),
+            ];
             return null;
         }
+    }
+
+    /**
+     * Return and clear parser errors from the last parse() call.
+     *
+     * @return array<int, array<string, string>>
+     */
+    public function consumeErrors()
+    {
+        $errors = $this->parseErrors;
+        $this->parseErrors = [];
+
+        return $errors;
     }
 
     /**

@@ -9,6 +9,7 @@ use Devlin\ModelAnalyzer\Analyzers\IndexAnalyzer;
 use Devlin\ModelAnalyzer\Analyzers\InverseDetector;
 use Devlin\ModelAnalyzer\Analyzers\ModelRelationshipParser;
 use Devlin\ModelAnalyzer\Models\AnalysisResult;
+use Devlin\ModelAnalyzer\Models\Issue;
 use Devlin\ModelAnalyzer\Models\ModelInfo;
 use Devlin\ModelAnalyzer\Support\ModelScanner;
 
@@ -63,20 +64,54 @@ class ModelAnalyzer
 
         // 2. Build ModelInfo objects
         foreach ($classes as $class) {
+            $shortName = class_basename($class);
+
             try {
                 $reflection    = new \ReflectionClass($class);
                 /** @var \Illuminate\Database\Eloquent\Model $instance */
                 $instance      = $reflection->newInstanceWithoutConstructor();
                 $relationships = $this->relationshipParser->parse($class);
+                $parseErrors   = $this->relationshipParser->consumeErrors();
 
                 $result->models[] = new ModelInfo(
                     $class,
-                    class_basename($class),
+                    $shortName,
                     $instance->getTable(),
                     $relationships
                 );
+
+                foreach ($parseErrors as $error) {
+                    $result->addIssue(new Issue(
+                        'relationship_parse_error',
+                        'warning',
+                        $shortName,
+                        sprintf(
+                            'Failed to inspect relationship method %s::%s(): %s',
+                            $shortName,
+                            $error['method'],
+                            $error['error']
+                        ),
+                        'Review this relationship method for side effects and return a valid Eloquent relation.',
+                        [
+                            'model' => $class,
+                            'method' => $error['method'],
+                        ]
+                    ));
+                }
             } catch (\Throwable $e) {
-                // Skip models that cannot be instantiated
+                $result->addIssue(new Issue(
+                    'model_analysis_error',
+                    'error',
+                    $shortName,
+                    sprintf(
+                        'Failed to analyze model %s: %s',
+                        $shortName,
+                        $e->getMessage()
+                    ),
+                    'Check constructor/property initialization and relationship methods for this model.',
+                    ['model' => $class]
+                ));
+
                 continue;
             }
         }

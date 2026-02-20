@@ -30,27 +30,62 @@ class AnalyzeCommand extends Command
         $onlyModels = $this->parseCommaSeparated($this->option('models'));
         $format = strtolower($this->option('format'));
         $debug = (bool) $this->option('debug');
-        $result = null;
-        $progress = $debug ? function ($event, array $payload = []) {
-            if ($event === 'model_start') {
-                $this->line(sprintf('Analyzing model: %s', $payload['class']));
-            }
-        } : null;
+        $analysisState = [
+            'started' => false,
+            'finished' => false,
+            'current_model' => null,
+        ];
 
-        if ($format === 'json') {
-            $result = $analyzer->analyze($onlyModels ?: null, $progress);
-        } else {
+        $this->registerTerminationDiagnostics($analysisState);
+
+        $result = null;
+        $progress = function ($event, array $payload = []) use (&$analysisState, $debug) {
+            if ($event === 'model_start') {
+                $analysisState['current_model'] = $payload['class'] ?? null;
+
+                if ($debug) {
+                    $this->line(sprintf('Analyzing model: %s', $payload['class']));
+                }
+                return;
+            }
+
+            if ($event === 'model_error') {
+                $analysisState['current_model'] = null;
+
+                if ($debug) {
+                    $this->warn(sprintf(
+                        'Model error in %s: %s',
+                        $payload['class'] ?? 'unknown',
+                        $payload['error'] ?? 'unknown error'
+                    ));
+                }
+                return;
+            }
+
+            if ($event === 'model_done') {
+                $analysisState['current_model'] = null;
+            }
+        };
+
+        if ($format !== 'json') {
             $this->newLine();
             $this->info('Scanning models and analyzing relationships...');
-            $startedAt = microtime(true);
+        }
 
-            try {
-                $result = $analyzer->analyze($onlyModels ?: null, $progress);
-            } catch (\Throwable $e) {
-                $this->error('Analysis failed: ' . $e->getMessage());
-                return 1;
-            }
+        $startedAt = microtime(true);
+        $analysisState['started'] = true;
 
+        try {
+            $result = $analyzer->analyze($onlyModels ?: null, $progress);
+        } catch (\Throwable $e) {
+            $analysisState['finished'] = true;
+            $this->error('Analysis failed: ' . $e->getMessage());
+            return 1;
+        }
+
+        $analysisState['finished'] = true;
+
+        if ($format !== 'json') {
             $duration = microtime(true) - $startedAt;
             $this->info(sprintf('Analysis completed in %.2fs.', $duration));
             $this->newLine(2);
@@ -92,5 +127,47 @@ class AnalyzeCommand extends Command
         }
 
         return array_map('trim', explode(',', $value));
+    }
+
+    /**
+     * Print actionable diagnostics if the PHP process terminates unexpectedly
+     * during model analysis (fatal error / die / exit).
+     *
+     * @param array<string, mixed> $analysisState
+     * @return void
+     */
+    private function registerTerminationDiagnostics(array &$analysisState)
+    {
+        register_shutdown_function(function () use (&$analysisState) {
+            if (empty($analysisState['started']) || !empty($analysisState['finished'])) {
+                return;
+            }
+
+            $currentModel = isset($analysisState['current_model']) && $analysisState['current_model'] !== null
+                ? $analysisState['current_model']
+                : 'unknown model';
+
+            $lastError = error_get_last();
+            $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR];
+
+            if (is_array($lastError) && isset($lastError['type']) && in_array($lastError['type'], $fatalTypes, true)) {
+                $message = sprintf(
+                    '[model-analyzer] Fatal error while analyzing model %s: %s in %s:%d',
+                    $currentModel,
+                    $lastError['message'] ?? 'unknown error',
+                    $lastError['file'] ?? 'unknown file',
+                    $lastError['line'] ?? 0
+                );
+
+                fwrite(STDERR, PHP_EOL . $message . PHP_EOL);
+                return;
+            }
+
+            $message = sprintf(
+                '[model-analyzer] Analysis terminated while analyzing model %s. This is usually caused by exit()/die()/dd() or a process-level fatal error.',
+                $currentModel
+            );
+            fwrite(STDERR, PHP_EOL . $message . PHP_EOL);
+        });
     }
 }

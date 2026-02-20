@@ -13,6 +13,7 @@ class AnalyzeCommand extends Command
                             {--strict          : Exit with non-zero code if any issues are found}
                             {--format=cli      : Output format: cli or json}
                             {--debug           : Print model-by-model progress for troubleshooting}
+                            {--detail          : Show full issue list with messages and suggestions}
                             {--models=         : Comma-separated list of model names to analyze}
                             {--tables=         : Comma-separated list of tables to analyze}';
 
@@ -29,7 +30,8 @@ class AnalyzeCommand extends Command
     {
         $onlyModels = $this->parseCommaSeparated($this->option('models'));
         $format = strtolower($this->option('format'));
-        $debug = (bool) $this->option('debug');
+        $debug  = (bool) $this->option('debug');
+        $detail = (bool) $this->option('detail');
         $analysisState = [
             'started' => false,
             'finished' => false,
@@ -108,7 +110,7 @@ class AnalyzeCommand extends Command
             $this->line(json_encode($result->toArray(), JSON_PRETTY_PRINT));
         } else {
             $formatter = new OutputFormatter($this->output);
-            $formatter->printAnalysis($result);
+            $formatter->printAnalysis($result, $detail);
 
             if (count($result->models) === 0) {
                 $this->warn('No Eloquent models were discovered. Check model_paths in config/model-analyzer.php.');

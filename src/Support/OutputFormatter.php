@@ -20,20 +20,27 @@ class OutputFormatter
     }
 
     /**
-     * Print the full analysis report to the console.
+     * Print the analysis report to the console.
+     *
+     * Without $detail: summary view (counts only + hint).
+     * With    $detail: full view (individual issues and suggestions).
      *
      * @param AnalysisResult $result
+     * @param bool           $detail
      * @return void
      */
-    public function printAnalysis(AnalysisResult $result)
+    public function printAnalysis(AnalysisResult $result, $detail = false)
     {
-        $this->output->newLine();
-        $this->output->writeln('<info>Analyzing relationships...</info>');
         $this->output->newLine();
 
         $this->printHealthScore($result->healthScore);
         $this->printStats($result);
-        $this->printIssues($result);
+
+        if ($detail) {
+            $this->printIssues($result);
+        } else {
+            $this->printIssueSummary($result);
+        }
     }
 
     /**
@@ -104,6 +111,75 @@ class OutputFormatter
         ];
 
         $this->output->table(['Metric', 'Count'], $rows);
+    }
+
+    /**
+     * Print a compact issue summary (counts by type) with a hint to use --detail.
+     *
+     * @param AnalysisResult $result
+     * @return void
+     */
+    private function printIssueSummary(AnalysisResult $result)
+    {
+        $errors   = $result->getErrors();
+        $warnings = $result->getWarnings();
+        $infos    = $result->getInfos();
+
+        $total = count($errors) + count($warnings) + count($infos);
+
+        if ($total === 0) {
+            $this->output->newLine();
+            $this->output->writeln('<info>No issues found. All relationships look healthy!</info>');
+            return;
+        }
+
+        // Group counts by issue type within each severity
+        $countsByType = [];
+        foreach ($result->issues as $issue) {
+            $countsByType[$issue->severity][$issue->type] =
+                ($countsByType[$issue->severity][$issue->type] ?? 0) + 1;
+        }
+
+        $this->output->newLine();
+
+        if (count($errors) > 0) {
+            $parts = [];
+            foreach ($countsByType['error'] ?? [] as $type => $n) {
+                $parts[] = $n . ' ' . str_replace('_', ' ', $type);
+            }
+            $this->output->writeln(sprintf(
+                '  <fg=red;options=bold>%d error(s)</>  — %s',
+                count($errors),
+                implode(', ', $parts)
+            ));
+        }
+
+        if (count($warnings) > 0) {
+            $parts = [];
+            foreach ($countsByType['warning'] ?? [] as $type => $n) {
+                $parts[] = $n . ' ' . str_replace('_', ' ', $type);
+            }
+            $this->output->writeln(sprintf(
+                '  <fg=yellow;options=bold>%d warning(s)</> — %s',
+                count($warnings),
+                implode(', ', $parts)
+            ));
+        }
+
+        if (count($infos) > 0) {
+            $parts = [];
+            foreach ($countsByType['info'] ?? [] as $type => $n) {
+                $parts[] = $n . ' ' . str_replace('_', ' ', $type);
+            }
+            $this->output->writeln(sprintf(
+                '  <fg=blue;options=bold>%d info</>      — %s',
+                count($infos),
+                implode(', ', $parts)
+            ));
+        }
+
+        $this->output->newLine();
+        $this->output->writeln('<comment>Run with --detail to see all issues and suggestions.</comment>');
     }
 
     /**

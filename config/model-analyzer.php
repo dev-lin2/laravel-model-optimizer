@@ -3,6 +3,17 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Migration Directories
+    |--------------------------------------------------------------------------
+    | Directories where your Laravel migration files are located.
+    | Set to an empty array to disable migration checking.
+    */
+    'migration_paths' => [
+        database_path('migrations'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Model Directories
     |--------------------------------------------------------------------------
     | Directories where your Eloquent models are located.

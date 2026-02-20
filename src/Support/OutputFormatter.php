@@ -346,6 +346,34 @@ class OutputFormatter
             );
         }
 
+        if (isset($typeCounts['pending_migration'])) {
+            $recs[] = sprintf(
+                'Run migrations: %d table(s) defined in migrations are missing from the database',
+                $typeCounts['pending_migration']
+            );
+        }
+
+        if (isset($typeCounts['column_not_in_db'])) {
+            $recs[] = sprintf(
+                'Run migrations: %d column(s) defined in migrations are missing from the database',
+                $typeCounts['column_not_in_db']
+            );
+        }
+
+        if (isset($typeCounts['no_migration_for_table'])) {
+            $recs[] = sprintf(
+                'Create migration(s) for %d table(s) that exist in the database without a migration file',
+                $typeCounts['no_migration_for_table']
+            );
+        }
+
+        if (isset($typeCounts['db_column_not_in_migration'])) {
+            $recs[] = sprintf(
+                'Document %d column(s) that exist in the database but are absent from all migration files',
+                $typeCounts['db_column_not_in_migration']
+            );
+        }
+
         return $recs;
     }
 }

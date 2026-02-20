@@ -7,10 +7,12 @@ use Devlin\ModelAnalyzer\Analyzers\DatabaseMismatchDetector;
 use Devlin\ModelAnalyzer\Analyzers\DatabaseSchemaReader;
 use Devlin\ModelAnalyzer\Analyzers\IndexAnalyzer;
 use Devlin\ModelAnalyzer\Analyzers\InverseDetector;
+use Devlin\ModelAnalyzer\Analyzers\MigrationMismatchDetector;
 use Devlin\ModelAnalyzer\Analyzers\ModelRelationshipParser;
 use Devlin\ModelAnalyzer\Models\AnalysisResult;
 use Devlin\ModelAnalyzer\Models\Issue;
 use Devlin\ModelAnalyzer\Models\ModelInfo;
+use Devlin\ModelAnalyzer\Support\MigrationScanner;
 use Devlin\ModelAnalyzer\Support\ModelScanner;
 
 class ModelAnalyzer
@@ -162,12 +164,37 @@ class ModelAnalyzer
             ));
         }
 
-        // 4. Run detectors
+        // 4. Scan migration files
+        $migrationSchema = [];
+        $migrationPaths  = $this->config['migration_paths'] ?? [];
+
+        if (!empty($migrationPaths)) {
+            if (is_callable($progress)) {
+                $progress('phase_start', ['phase' => 'migrations']);
+            }
+
+            try {
+                $migrationScanner = new MigrationScanner();
+                $migrationSchema  = $migrationScanner->scan($migrationPaths);
+            } catch (\Throwable $e) {
+                $result->addIssue(new Issue(
+                    'migration_scan_error',
+                    'error',
+                    'system',
+                    sprintf('Failed to scan migration files: %s', $e->getMessage()),
+                    'Check your migration_paths in config/model-analyzer.php.',
+                    []
+                ));
+            }
+        }
+
+        // 5. Run detectors
         $detectors = [
             new InverseDetector(),
             new CircularDependencyDetector(),
             new DatabaseMismatchDetector($this->schemaReader),
             new IndexAnalyzer($this->schemaReader),
+            new MigrationMismatchDetector($migrationSchema, $this->schemaReader),
         ];
 
         foreach ($detectors as $detector) {
@@ -189,7 +216,7 @@ class ModelAnalyzer
             }
         }
 
-        // 5. Calculate health score
+        // 6. Calculate health score
         if (is_callable($progress)) {
             $progress('phase_start', ['phase' => 'health_score']);
         }
@@ -286,6 +313,7 @@ class ModelAnalyzer
     {
         return [
             'model_paths'           => [],
+            'migration_paths'       => [],
             'excluded_models'       => [],
             'excluded_tables'       => [],
             'relationship_types'    => [],

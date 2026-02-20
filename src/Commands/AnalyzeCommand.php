@@ -74,6 +74,8 @@ class AnalyzeCommand extends Command
 
                 if ($phase === 'schema') {
                     $this->line('Building schema snapshot...');
+                } elseif ($phase === 'migrations') {
+                    $this->line('Scanning migration files...');
                 } elseif ($phase === 'detector') {
                     $this->line(sprintf('Running detector: %s', $payload['name'] ?? 'unknown'));
                 } elseif ($phase === 'health_score') {

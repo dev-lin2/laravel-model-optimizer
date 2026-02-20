@@ -252,6 +252,9 @@ class ModelRelationshipParser
      */
     private function makeInstance($modelClass)
     {
-        return new $modelClass();
+        $reflection = new ReflectionClass($modelClass);
+        /** @var \Illuminate\Database\Eloquent\Model $instance */
+        $instance = $reflection->newInstanceWithoutConstructor();
+        return $instance;
     }
 }

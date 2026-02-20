@@ -64,8 +64,9 @@ class ModelAnalyzer
         // 2. Build ModelInfo objects
         foreach ($classes as $class) {
             try {
+                $reflection    = new \ReflectionClass($class);
                 /** @var \Illuminate\Database\Eloquent\Model $instance */
-                $instance      = new $class();
+                $instance      = $reflection->newInstanceWithoutConstructor();
                 $relationships = $this->relationshipParser->parse($class);
 
                 $result->models[] = new ModelInfo(

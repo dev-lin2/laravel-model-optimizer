@@ -156,7 +156,7 @@ class OutputFormatter
      */
     private function printIssue(Issue $issue)
     {
-        $this->output->writeln('  • ' . $issue->message);
+        $this->output->writeln('  - ' . $issue->message);
 
         if ($issue->suggestion !== null) {
             foreach (explode("\n", $issue->suggestion) as $line) {
@@ -213,7 +213,7 @@ class OutputFormatter
         $recommendations = $this->buildRecommendations($result);
 
         if (count($recommendations) === 0) {
-            $this->output->writeln('<info>No recommendations — everything looks great!</info>');
+            $this->output->writeln('<info>No recommendations - everything looks great!</info>');
             return;
         }
 
@@ -273,3 +273,4 @@ class OutputFormatter
         return $recs;
     }
 }
+

@@ -27,16 +27,30 @@ class AnalyzeCommand extends Command
     public function handle(ModelAnalyzer $analyzer)
     {
         $onlyModels = $this->parseCommaSeparated($this->option('models'));
-
-        $result = $analyzer->analyze($onlyModels ?: null);
-
         $format = strtolower($this->option('format'));
+        $result = null;
+
+        if ($format === 'json') {
+            $result = $analyzer->analyze($onlyModels ?: null);
+        } else {
+            $this->newLine();
+            $this->info('Scanning models and analyzing relationships...');
+            $this->output->progressStart(1);
+            $result = $analyzer->analyze($onlyModels ?: null);
+            $this->output->progressAdvance();
+            $this->output->progressFinish();
+            $this->newLine(2);
+        }
 
         if ($format === 'json') {
             $this->line(json_encode($result->toArray(), JSON_PRETTY_PRINT));
         } else {
             $formatter = new OutputFormatter($this->output);
             $formatter->printAnalysis($result);
+
+            if (count($result->models) === 0) {
+                $this->warn('No Eloquent models were discovered. Check model_paths in config/model-analyzer.php.');
+            }
         }
 
         $hasErrors = count($result->getErrors()) > 0;

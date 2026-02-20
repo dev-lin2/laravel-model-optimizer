@@ -35,10 +35,17 @@ class AnalyzeCommand extends Command
         } else {
             $this->newLine();
             $this->info('Scanning models and analyzing relationships...');
-            $this->output->progressStart(1);
-            $result = $analyzer->analyze($onlyModels ?: null);
-            $this->output->progressAdvance();
-            $this->output->progressFinish();
+            $startedAt = microtime(true);
+
+            try {
+                $result = $analyzer->analyze($onlyModels ?: null);
+            } catch (\Throwable $e) {
+                $this->error('Analysis failed: ' . $e->getMessage());
+                return 1;
+            }
+
+            $duration = microtime(true) - $startedAt;
+            $this->info(sprintf('Analysis completed in %.2fs.', $duration));
             $this->newLine(2);
         }
 

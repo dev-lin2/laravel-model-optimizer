@@ -148,7 +148,7 @@ class ModelScanner
             }
 
             return $reflection->isSubclassOf(Model::class);
-        } catch (\ReflectionException $e) {
+        } catch (\Throwable $e) {
             return false;
         }
     }

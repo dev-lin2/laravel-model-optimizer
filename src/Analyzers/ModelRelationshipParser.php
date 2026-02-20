@@ -101,11 +101,36 @@ class ModelRelationshipParser
             }
         }
 
-        // Fall back: actually call the method and check the return value
+        // Fall back: scan the method source for known Eloquent relationship calls.
+        // Avoids executing arbitrary model code (which can call exit/die/dd).
         try {
-            $instance    = $this->makeInstance($method->getDeclaringClass()->getName());
-            $returnValue = $method->invoke($instance);
-            return $returnValue instanceof Relation;
+            $filename = $method->getFileName();
+            if ($filename === false) {
+                return false;
+            }
+
+            $lines = file($filename, FILE_IGNORE_NEW_LINES);
+            if ($lines === false) {
+                return false;
+            }
+
+            $start = $method->getStartLine() - 1;
+            $end   = $method->getEndLine() - 1;
+            $body  = implode("\n", array_slice($lines, $start, $end - $start + 1));
+
+            $relationMethods = [
+                'hasOne', 'hasMany', 'belongsTo', 'belongsToMany',
+                'morphOne', 'morphMany', 'morphTo', 'morphToMany', 'morphedByMany',
+                'hasOneThrough', 'hasManyThrough',
+            ];
+
+            foreach ($relationMethods as $rel) {
+                if (strpos($body, '$this->' . $rel . '(') !== false) {
+                    return true;
+                }
+            }
+
+            return false;
         } catch (\Throwable $e) {
             return false;
         }

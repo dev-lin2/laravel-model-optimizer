@@ -145,7 +145,18 @@ class ModelAnalyzer
         }
 
         // 3. Capture schema snapshot
-        $result->schema = $this->buildSchemaSnapshot($result);
+        try {
+            $result->schema = $this->buildSchemaSnapshot($result);
+        } catch (\Throwable $e) {
+            $result->addIssue(new Issue(
+                'schema_read_error',
+                'error',
+                'system',
+                sprintf('Failed to read database schema: %s', $e->getMessage()),
+                'Check your database connection and configuration.',
+                []
+            ));
+        }
 
         // 4. Run detectors
         $detectors = [
@@ -156,7 +167,18 @@ class ModelAnalyzer
         ];
 
         foreach ($detectors as $detector) {
-            $detector->detect($result);
+            try {
+                $detector->detect($result);
+            } catch (\Throwable $e) {
+                $result->addIssue(new Issue(
+                    'detector_error',
+                    'error',
+                    'system',
+                    sprintf('%s failed: %s', class_basename($detector), $e->getMessage()),
+                    'This is an internal analysis error. Please report it.',
+                    ['detector' => get_class($detector)]
+                ));
+            }
         }
 
         // 5. Calculate health score

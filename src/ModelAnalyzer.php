@@ -145,6 +145,10 @@ class ModelAnalyzer
         }
 
         // 3. Capture schema snapshot
+        if (is_callable($progress)) {
+            $progress('phase_start', ['phase' => 'schema']);
+        }
+
         try {
             $result->schema = $this->buildSchemaSnapshot($result);
         } catch (\Throwable $e) {
@@ -167,6 +171,10 @@ class ModelAnalyzer
         ];
 
         foreach ($detectors as $detector) {
+            if (is_callable($progress)) {
+                $progress('phase_start', ['phase' => 'detector', 'name' => class_basename($detector)]);
+            }
+
             try {
                 $detector->detect($result);
             } catch (\Throwable $e) {
@@ -182,6 +190,10 @@ class ModelAnalyzer
         }
 
         // 5. Calculate health score
+        if (is_callable($progress)) {
+            $progress('phase_start', ['phase' => 'health_score']);
+        }
+
         $result->healthScore = $this->calculateHealthScore($result);
 
         return $result;

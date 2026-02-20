@@ -64,6 +64,19 @@ class AnalyzeCommand extends Command
 
             if ($event === 'model_done') {
                 $analysisState['current_model'] = null;
+                return;
+            }
+
+            if ($event === 'phase_start' && $debug) {
+                $phase = $payload['phase'] ?? 'unknown';
+
+                if ($phase === 'schema') {
+                    $this->line('Building schema snapshot...');
+                } elseif ($phase === 'detector') {
+                    $this->line(sprintf('Running detector: %s', $payload['name'] ?? 'unknown'));
+                } elseif ($phase === 'health_score') {
+                    $this->line('Calculating health score...');
+                }
             }
         };
 

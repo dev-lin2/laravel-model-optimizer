@@ -6,6 +6,8 @@ use Illuminate\Console\Command;
 use Devlin\ModelAnalyzer\ModelAnalyzer;
 use Devlin\ModelAnalyzer\Support\HtmlGraphGenerator;
 use Devlin\ModelAnalyzer\Support\ErdGenerator;
+use Devlin\ModelAnalyzer\Support\SvgGraphGenerator;
+use Devlin\ModelAnalyzer\Support\SvgErdGenerator;
 
 class VisualizeCommand extends Command
 {
@@ -13,10 +15,11 @@ class VisualizeCommand extends Command
     protected $signature = 'model-analyzer:visualize
                             {--output=  : Output file path (default: model-relationships.html or model-erd.html)}
                             {--models=  : Comma-separated list of model names to include}
-                            {--erd : Generate an Entity Relationship Diagram instead of a force-directed graph}';
+                            {--erd : Generate an Entity Relationship Diagram instead of a force-directed graph}
+                            {--format=html : Output format (html or svg)}';
 
     /** @var string */
-    protected $description = 'Generate an interactive HTML graph of model relationships';
+    protected $description = 'Generate an interactive HTML or static SVG graph of model relationships';
 
     /**
      * @param ModelAnalyzer $analyzer
@@ -25,7 +28,15 @@ class VisualizeCommand extends Command
     public function handle(ModelAnalyzer $analyzer)
     {
         $isErd = $this->option('erd');
-        $defaultFile = $isErd ? 'model-erd.html' : 'model-relationships.html';
+        $format = strtolower($this->option('format') ?: 'html');
+
+        if (!in_array($format, ['html', 'svg'])) {
+            $this->error("Invalid format '{$format}'. Supported formats: html, svg");
+            return 1;
+        }
+
+        $ext = $format === 'svg' ? 'svg' : 'html';
+        $defaultFile = $isErd ? "model-erd.{$ext}" : "model-relationships.{$ext}";
         $outputPath = $this->option('output') ?: getcwd() . '/' . $defaultFile;
         $onlyModels = $this->parseCommaSeparated($this->option('models'));
 
@@ -45,9 +56,9 @@ class VisualizeCommand extends Command
         }
 
         if ($isErd) {
-            $generator = new ErdGenerator();
+            $generator = $format === 'svg' ? new SvgErdGenerator() : new ErdGenerator();
         } else {
-            $generator = new HtmlGraphGenerator();
+            $generator = $format === 'svg' ? new SvgGraphGenerator() : new HtmlGraphGenerator();
         }
 
         $html = $generator->generate($result);

@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Devlin\ModelAnalyzer\Commands\AnalyzeCommand;
 use Devlin\ModelAnalyzer\Commands\HealthCommand;
 use Devlin\ModelAnalyzer\Commands\ListModelsCommand;
+use Devlin\ModelAnalyzer\Commands\VisualizeCommand;
 
 class ModelAnalyzerServiceProvider extends ServiceProvider
 {
@@ -44,6 +45,7 @@ class ModelAnalyzerServiceProvider extends ServiceProvider
                 AnalyzeCommand::class,
                 HealthCommand::class,
                 ListModelsCommand::class,
+                VisualizeCommand::class,
             ]);
         }
     }

@@ -237,7 +237,9 @@ class ModelAnalyzer
         $schema = [];
 
         foreach ($this->schemaReader->getTables() as $table) {
-            $schema[$table] = array_keys($this->schemaReader->getColumns($table));
+            // Keep the full column metadata (name, type, nullable, key, etc.)
+            // so consumers like ErdGenerator can render types and flag PKs/FKs.
+            $schema[$table] = $this->schemaReader->getColumns($table);
         }
 
         return $schema;

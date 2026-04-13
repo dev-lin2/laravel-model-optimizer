@@ -42,13 +42,23 @@ class ModelScanner
             $finder->files()->name('*.php')->in($path);
 
             foreach ($finder as $file) {
-                $class = $this->getClassFromFile($file->getRealPath());
+                $info = $this->parseFile($file->getRealPath());
 
-                if ($class === null) {
+                if ($info === null) {
                     continue;
                 }
 
+                $class = $info['class'];
+
                 if (in_array($class, $this->excludedModels, true)) {
+                    continue;
+                }
+
+                // Pre-filter by parent class name to avoid autoloading files
+                // that are clearly not models. This protects against fatal
+                // errors in broken controllers, middleware, etc., which in
+                // PHP 7.4 cannot be caught via try/catch.
+                if (!$this->looksLikeModel($info['extends'])) {
                     continue;
                 }
 
@@ -64,12 +74,12 @@ class ModelScanner
     }
 
     /**
-     * Parse a PHP file and return its fully-qualified class name, or null.
+     * Parse a PHP file and return its class metadata (FQCN + parent class), or null.
      *
      * @param string $filePath
-     * @return string|null
+     * @return array|null
      */
-    protected function getClassFromFile($filePath)
+    protected function parseFile($filePath)
     {
         $contents = @file_get_contents($filePath);
 
@@ -81,6 +91,7 @@ class ModelScanner
         $count     = count($tokens);
         $namespace = '';
         $class     = '';
+        $extends   = '';
 
         for ($i = 0; $i < $count; $i++) {
             // Collect namespace
@@ -116,6 +127,29 @@ class ModelScanner
 
                 if ($i < $count && is_array($tokens[$i]) && $tokens[$i][0] === T_STRING) {
                     $class = $tokens[$i][1];
+
+                    // Look ahead for `extends ParentClass`
+                    $k = $i + 1;
+                    while ($k < $count && $tokens[$k] !== '{') {
+                        if (is_array($tokens[$k]) && $tokens[$k][0] === T_EXTENDS) {
+                            $k++;
+                            // Skip whitespace
+                            while ($k < $count && is_array($tokens[$k]) && $tokens[$k][0] === T_WHITESPACE) {
+                                $k++;
+                            }
+                            // Collect the extends identifier (possibly namespaced)
+                            $parent = '';
+                            while ($k < $count && is_array($tokens[$k])
+                                && ($tokens[$k][0] === T_STRING || $tokens[$k][0] === T_NS_SEPARATOR)) {
+                                $parent .= $tokens[$k][1];
+                                $k++;
+                            }
+                            $extends = $parent;
+                            break;
+                        }
+                        $k++;
+                    }
+
                     break;
                 }
             }
@@ -125,7 +159,74 @@ class ModelScanner
             return null;
         }
 
-        return $namespace !== '' ? $namespace . '\\' . $class : $class;
+        $fqcn = $namespace !== '' ? $namespace . '\\' . $class : $class;
+
+        return ['class' => $fqcn, 'extends' => $extends];
+    }
+
+    /**
+     * Determine if the parent class name (as written in the `extends` clause)
+     * plausibly belongs to an Eloquent model. Unknown parents are treated as
+     * "maybe" so custom base models still get scanned — only clearly non-model
+     * bases (Controller, Middleware, ServiceProvider, etc.) are rejected.
+     *
+     * @param string $extends Short name or FQCN of the parent class.
+     * @return bool
+     */
+    protected function looksLikeModel($extends)
+    {
+        if ($extends === '') {
+            // No parent — not an Eloquent model.
+            return false;
+        }
+
+        // Extract the short name from a possibly-namespaced identifier.
+        $shortName = $extends;
+        $pos = strrpos($extends, '\\');
+        if ($pos !== false) {
+            $shortName = substr($extends, $pos + 1);
+        }
+
+        // Clearly-not-model Laravel base classes.
+        $nonModelBases = [
+            'Controller',
+            'Middleware',
+            'ServiceProvider',
+            'FormRequest',
+            'Request',
+            'Rule',
+            'Command',
+            'Notification',
+            'Mailable',
+            'Event',
+            'Listener',
+            'Policy',
+            'Resource',
+            'JsonResource',
+            'ResourceCollection',
+            'Seeder',
+            'Factory',
+            'Exception',
+            'TestCase',
+            'Job',
+            'Channel',
+            'Broadcast',
+            'Observer',
+            'Kernel',
+            'RouteServiceProvider',
+            'AuthServiceProvider',
+            'EventServiceProvider',
+            'AppServiceProvider',
+            'BroadcastServiceProvider',
+            'HttpKernel',
+            'ConsoleKernel',
+        ];
+
+        if (in_array($shortName, $nonModelBases, true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -136,11 +237,11 @@ class ModelScanner
      */
     protected function isEloquentModel($class)
     {
-        if (!class_exists($class)) {
-            return false;
-        }
-
         try {
+            if (!class_exists($class)) {
+                return false;
+            }
+
             $reflection = new \ReflectionClass($class);
 
             if ($reflection->isAbstract()) {
@@ -149,6 +250,8 @@ class ModelScanner
 
             return $reflection->isSubclassOf(Model::class);
         } catch (\Throwable $e) {
+            // Skip files that fail to autoload (missing traits, parse errors,
+            // broken use statements, etc.) so the scanner can continue.
             return false;
         }
     }

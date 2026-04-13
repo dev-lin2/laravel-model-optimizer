@@ -2,6 +2,10 @@
 
 A Laravel package that scans your Eloquent models and validates their relationships against your actual database schema. It detects missing inverse relationships, circular dependencies, missing foreign key columns, missing indexes, and more — then reports a health score for your model layer.
 
+# Demo
+
+You can check a quick demo [here](http://optimizer.linaung.dev/)
+
 ## Requirements
 
 | Dependency | Version |

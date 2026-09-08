@@ -97,6 +97,9 @@ php artisan model-analyzer:analyze
 | `--format=cli` | Output format: `cli` (default) or `json` |
 | `--strict` | Exit with code `1` if any warnings are found |
 | `--models=User,Post` | Analyze only the specified models (comma-separated) |
+| `--tables=users,posts` | Analyze only the specified tables (comma-separated) |
+| `--detail` | Show the full issue list with messages and suggestions (default output is summary counts) |
+| `--debug` | Print model-by-model progress, for troubleshooting a failing scan |
 
 **Examples:**
 
@@ -344,6 +347,13 @@ php artisan model-analyzer:report --hide-warnings
 | Circular dependency | Error | Two models reference each other in a way that creates a loop |
 | Missing foreign key column | Error | A relationship references a column that does not exist in the database |
 | Missing index on foreign key | Warning | A foreign key column has no index, which can hurt query performance |
+| Missing foreign key constraint | Warning | A `*_id` column has no FK constraint although its target table exists (`model-analyzer:report`) |
+| Unindexed foreign key candidate | Warning | A likely foreign key column has neither a constraint nor an index (`model-analyzer:report`) |
+| Schema drift | Warning | A table or column exists in the database but not in the migrations, or the reverse (`--source=both`) |
+
+The first four are reported by `model-analyzer:analyze` and `model-analyzer:health`, which are
+model-driven. The last three come from `model-analyzer:report`, which is schema-driven and so
+also sees tables that have no Eloquent model.
 
 ## Health Score
 
@@ -364,6 +374,32 @@ Or allow warnings but fail only on errors (the default):
 ```yaml
 - name: Analyze models
   run: php artisan model-analyzer:analyze
+```
+
+### Without a database
+
+`--source=migrations` reads your migration files directly, so schema checks run on a fresh
+checkout with no database provisioned:
+
+```yaml
+- name: Check for missing foreign keys
+  run: php artisan model-analyzer:report --source=migrations --fail-on-findings
+
+- name: Publish schema docs
+  run: php artisan model-analyzer:docs --source=migrations --output=docs/schema.md
+```
+
+`model-analyzer:report` exits 0 by default no matter what it finds; `--fail-on-findings` is what
+makes it gate a pipeline. To keep the log quiet, add `--issues=none`.
+
+### Catching schema drift
+
+With a database available, `--source=both` compares your migrations against the live schema and
+fails when they have diverged:
+
+```yaml
+- name: Detect schema drift
+  run: php artisan model-analyzer:report --source=both --fail-on-findings
 ```
 
 ## Running Tests

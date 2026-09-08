@@ -234,6 +234,7 @@ php artisan model-analyzer:docs
 |---|---|
 | `--source=database` | Schema source: `database`, `migrations`, or `both` |
 | `--format=md` | Output format: `md` (Markdown) or `html` |
+| `--style=table` | Presentation: `table` (data dictionary) or `prose` (definitions) |
 | `--output=path` | Output file path (default: `schema-docs-<source>.<ext>`) |
 | `--models=User,Post` | Restrict model enrichment to these models |
 | `--no-models` | Skip Eloquent model discovery entirely — never loads your app's classes |
@@ -252,7 +253,43 @@ php artisan model-analyzer:docs --source=migrations --output=docs/schema.md
 
 # Styled HTML, light and dark aware
 php artisan model-analyzer:docs --format=html --output=public/schema.html
+
+# Prose definitions instead of column tables
+php artisan model-analyzer:docs --style=prose --output=docs/definitions.md
 ```
+
+#### Two presentations
+
+`--style=table` (the default) produces a **data dictionary**: one row per column, with type,
+nullability, key and references. Best when you want to look something up.
+
+`--style=prose` produces **definitions**: each table described in sentences, with no column grid.
+Best when you want to read the schema rather than search it. `--style=definitions` is accepted
+as an alias.
+
+```markdown
+## orders
+
+`orders` is backed by the `App\Models\Order` model. It holds 5 columns, keyed by `id`.
+Required values: `user_id`.
+
+Each row references one `users` record via `user_id` and optionally references one
+`coupons` record via `coupon_id`.
+
+Referenced by `order_product` via `order_id`.
+
+The table supports soft deletion via `deleted_at`.
+
+`user_id` and `coupon_id` have a foreign key but no index.
+
+The model declares 2 relationships: `user()` (BelongsTo), `items()` (HasMany).
+```
+
+Every statement is derived from the schema itself — column counts, keys, foreign keys in both
+directions, Laravel's timestamp and soft-delete conventions, uniqueness and index coverage.
+Facts the source does not know are left unsaid rather than guessed, so migration-sourced
+definitions are shorter than database-sourced ones. It describes *structure*, not business
+meaning: it can say a row references `users`, but not what a status value signifies.
 
 ---
 

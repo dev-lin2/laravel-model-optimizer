@@ -5,6 +5,7 @@ namespace Devlin\ModelAnalyzer\Commands;
 use Devlin\ModelAnalyzer\Commands\Concerns\InteractsWithSchemaSources;
 use Devlin\ModelAnalyzer\ModelAnalyzer;
 use Devlin\ModelAnalyzer\Schema\SchemaSourceFactory;
+use Devlin\ModelAnalyzer\Support\DefinitionsGenerator;
 use Devlin\ModelAnalyzer\Support\DocsGenerator;
 use Devlin\ModelAnalyzer\Support\ModelMapBuilder;
 use Illuminate\Console\Command;
@@ -23,6 +24,7 @@ class DocsCommand extends Command
     protected $signature = 'model-analyzer:docs
                             {--source=database : Schema source: database, migrations, or both}
                             {--format=md       : Output format: md or html}
+                            {--style=table     : Presentation: table (data dictionary) or prose (definitions)}
                             {--output=         : Output file path}
                             {--models=         : Comma-separated list of model names to include}
                             {--no-models       : Skip Eloquent model discovery entirely (never loads app classes)}
@@ -69,8 +71,26 @@ class DocsCommand extends Command
             ? []
             : ModelMapBuilder::build($analyzer, $this->parseCommaSeparated($this->option('models')));
 
-        $generator = new DocsGenerator($models);
-        $content   = $format === 'html'
+        $style = strtolower(trim((string) $this->option('style')));
+
+        if ($style === '' || $style === 'dictionary') {
+            $style = 'table';
+        }
+
+        if ($style === 'definitions') {
+            $style = 'prose';
+        }
+
+        if (!in_array($style, ['table', 'prose'], true)) {
+            $this->errorIssue(sprintf('Unknown --style "%s". Falling back to "table".', $this->option('style')));
+            $style = 'table';
+        }
+
+        $generator = $style === 'prose'
+            ? new DefinitionsGenerator($models)
+            : new DocsGenerator($models);
+
+        $content = $format === 'html'
             ? $generator->generateHtml($primary)
             : $generator->generateMarkdown($primary);
 
@@ -109,7 +129,8 @@ class DocsCommand extends Command
         $path = (string) $this->option('output');
 
         if (trim($path) === '') {
-            $path = getcwd() . '/schema-docs-' . $source . '.' . $format;
+            $path = getcwd() . '/schema-' . ($this->option('style') === 'prose' ? 'definitions' : 'docs')
+                . '-' . $source . '.' . $format;
         }
 
         $dir = dirname($path);

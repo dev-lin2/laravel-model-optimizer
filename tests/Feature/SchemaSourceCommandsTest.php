@@ -322,6 +322,67 @@ class SchemaSourceCommandsTest extends TestCase
         $this->assertStringContainsString('"tableName": "users"', file_get_contents($path));
     }
 
+    public function test_docs_style_prose_generates_definitions()
+    {
+        $path = $this->out . '/definitions.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source' => 'database',
+            '--style'  => 'prose',
+            '--output' => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+
+        $content = file_get_contents($path);
+
+        $this->assertStringContainsString('# Table Definitions', $content);
+        $this->assertStringContainsString('It holds', $content);
+        $this->assertStringNotContainsString('| Column | Type |', $content);
+    }
+
+    public function test_docs_style_definitions_is_an_alias_for_prose()
+    {
+        $path = $this->out . '/definitions-alias.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source' => 'migrations',
+            '--style'  => 'definitions',
+            '--output' => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('# Table Definitions', file_get_contents($path));
+    }
+
+    public function test_docs_style_prose_html()
+    {
+        $path = $this->out . '/definitions.html';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--style'  => 'prose',
+            '--format' => 'html',
+            '--output' => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('<!DOCTYPE html>', file_get_contents($path));
+    }
+
+    public function test_unknown_style_falls_back_to_table()
+    {
+        $path = $this->out . '/bad-style.md';
+
+        [$exit, $output] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--style'  => 'interpretive-dance',
+            '--output' => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('Unknown --style', $output);
+        $this->assertStringContainsString('| Column | Type |', file_get_contents($path));
+    }
+
     public function test_fail_on_findings_is_opt_in()
     {
         [$default] = $this->captureArtisanOutput('model-analyzer:report', [

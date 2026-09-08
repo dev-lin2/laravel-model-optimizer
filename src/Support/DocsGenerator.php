@@ -402,12 +402,27 @@ CSS;
     }
 
     /**
+     * Slug matching the anchor a Markdown renderer derives from the heading.
+     *
+     * Markdown anchors are not ours to choose: the renderer generates them
+     * from the heading text, so a table-of-contents link must reproduce that
+     * algorithm exactly. GitHub lowercases, strips characters that are not
+     * letters, digits, spaces, hyphens or underscores, then replaces runs of
+     * whitespace with single hyphens. Underscores are preserved, which is why
+     * `activity_list` anchors as `#activity_list` and not `#activity-list`.
+     *
+     * The same slug is used for HTML id attributes so both formats agree.
+     *
      * @param  string $table
      * @return string
      */
     private function anchor($table)
     {
-        return 'table-' . preg_replace('/[^a-z0-9]+/i', '-', strtolower($table));
+        $slug = strtolower(trim((string) $table));
+        $slug = preg_replace('/[^\p{L}\p{N}\s_-]+/u', '', $slug);
+        $slug = preg_replace('/\s+/', '-', $slug);
+
+        return $slug === '' ? 'table' : $slug;
     }
 
     /**

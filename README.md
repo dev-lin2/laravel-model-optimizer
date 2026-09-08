@@ -2,13 +2,17 @@
 
 A Laravel package that scans your Eloquent models and validates their relationships against your actual database schema. It detects missing inverse relationships, circular dependencies, missing foreign key columns, missing indexes, and more — then reports a health score for your model layer.
 
+# Demo
+
+You can check a quick demo [here](http://optimizer.linaung.dev/)
+
 ## Requirements
 
 | Dependency | Version |
 |---|---|
-| PHP | `^8.2` |
-| Laravel / Illuminate | `^12.0` |
-| Symfony Finder | `^7.0` |
+| PHP | `^8.1` |
+| Laravel / Illuminate | `^9.0` – `^12.0` |
+| Symfony Finder | `^6.0` or `^7.0` |
 
 ## Installation
 
@@ -152,6 +156,48 @@ php artisan model-analyzer:list-models
 php artisan model-analyzer:list-models --with-relationships
 php artisan model-analyzer:list-models --json
 ```
+
+### `model-analyzer:visualize`
+
+Generates a visual diagram of your model relationships as a standalone file.
+
+```bash
+php artisan model-analyzer:visualize
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--output=path` | Output file path (default: `model-relationships.html` or `model-erd.html`) |
+| `--models=User,Post` | Comma-separated list of models to include |
+| `--erd` | Generate an Entity Relationship Diagram instead of a force-directed graph |
+| `--format=html` | Output format: `html` (interactive, D3.js) or `svg` (static, embeddable) |
+
+**Examples:**
+
+```bash
+# Interactive HTML graph (default)
+php artisan model-analyzer:visualize
+
+# ERD with table boxes, columns, and crow's foot cardinality
+php artisan model-analyzer:visualize --erd
+
+# Static SVG — embeddable in docs, READMEs, presentations
+php artisan model-analyzer:visualize --format=svg
+
+# SVG ERD for specific models
+php artisan model-analyzer:visualize --erd --format=svg --models=User,Post
+
+# Custom output path
+php artisan model-analyzer:visualize --format=svg --output=docs/models.svg
+```
+
+**HTML format** produces a standalone file with D3.js — drag nodes, zoom, hover for details.
+
+**SVG format** produces a pure `<svg>` file with no JavaScript — lightweight, scalable, and works anywhere images are supported.
+
+---
 
 ## What It Detects
 

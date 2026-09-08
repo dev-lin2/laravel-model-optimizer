@@ -22,16 +22,51 @@ class SvgErdGenerator
     public function generate(AnalysisResult $result)
     {
         $erdGenerator = new ErdGenerator();
-        $erdData = $erdGenerator->buildErdData($result);
 
+        return $this->render($erdGenerator->buildErdData($result), [
+            'models'        => count($result->models),
+            'relationships' => $result->totalRelationships(),
+            'errors'        => count($result->getErrors()),
+            'warnings'      => count($result->getWarnings()),
+            'health'        => $result->healthScore,
+        ]);
+    }
+
+    /**
+     * Render an SVG ERD directly from a schema snapshot (table-first).
+     *
+     * @param  \Devlin\ModelAnalyzer\Schema\SchemaSnapshot $snapshot
+     * @param  array<string, array>                       $models
+     * @return string
+     */
+    public function generateFromSnapshot($snapshot, array $models = [])
+    {
+        $erdData = SnapshotErdData::build($snapshot, $models);
+
+        return $this->render($erdData, [
+            'models'        => count($models),
+            'relationships' => count($erdData['relationships']),
+            'errors'        => count($snapshot->errors),
+            'warnings'      => count($snapshot->warnings),
+            'health'        => 100,
+        ]);
+    }
+
+    /**
+     * @param  array $erdData
+     * @param  array $stats
+     * @return string
+     */
+    private function render(array $erdData, array $stats)
+    {
         $tables = $erdData['tables'];
         $relationships = $erdData['relationships'];
 
-        $modelCount = count($result->models);
-        $relationshipCount = $result->totalRelationships();
-        $errorCount = count($result->getErrors());
-        $warningCount = count($result->getWarnings());
-        $healthScore = $result->healthScore;
+        $modelCount = $stats['models'];
+        $relationshipCount = $stats['relationships'];
+        $errorCount = $stats['errors'];
+        $warningCount = $stats['warnings'];
+        $healthScore = $stats['health'];
 
         // Compute box heights
         foreach ($tables as &$t) {

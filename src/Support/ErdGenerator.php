@@ -14,14 +14,55 @@ class ErdGenerator
      */
     public function generate(AnalysisResult $result)
     {
-        $erdData = $this->buildErdData($result);
+        return $this->renderHtml(
+            $this->buildErdData($result),
+            [
+                'models'        => count($result->models),
+                'relationships' => $result->totalRelationships(),
+                'errors'        => count($result->getErrors()),
+                'warnings'      => count($result->getWarnings()),
+                'health'        => $result->healthScore,
+            ]
+        );
+    }
+
+    /**
+     * Generate an ERD directly from a schema snapshot (table-first).
+     *
+     * Used by --source=migrations and --source=database. Models are optional
+     * enrichment: tables with no model still render.
+     *
+     * @param  \Devlin\ModelAnalyzer\Schema\SchemaSnapshot $snapshot
+     * @param  array<string, array>                       $models
+     * @return string
+     */
+    public function generateFromSnapshot($snapshot, array $models = [])
+    {
+        $erdData = SnapshotErdData::build($snapshot, $models);
+
+        return $this->renderHtml($erdData, [
+            'models'        => count($models),
+            'relationships' => count($erdData['relationships']),
+            'errors'        => count($snapshot->errors),
+            'warnings'      => count($snapshot->warnings),
+            'health'        => 100,
+        ]);
+    }
+
+    /**
+     * @param  array $erdData
+     * @param  array $stats
+     * @return string
+     */
+    private function renderHtml(array $erdData, array $stats)
+    {
         $jsonData = json_encode($erdData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
-        $modelCount = count($result->models);
-        $relationshipCount = $result->totalRelationships();
-        $errorCount = count($result->getErrors());
-        $warningCount = count($result->getWarnings());
-        $healthScore = $result->healthScore;
+        $modelCount        = $stats['models'];
+        $relationshipCount = $stats['relationships'];
+        $errorCount        = $stats['errors'];
+        $warningCount      = $stats['warnings'];
+        $healthScore       = $stats['health'];
 
         return <<<HTML
 <!DOCTYPE html>
@@ -462,16 +503,22 @@ HTML;
             $schemaColumns = $result->schema[$model->table] ?? [];
 
             if (!empty($schemaColumns)) {
-                foreach ($schemaColumns as $colName => $colInfo) {
-                    $isPrimary = ($colName === 'id');
-                    $isForeign = (bool) preg_match('/_id$/', $colName);
-                    $type = $colInfo['type'] ?? 'unknown';
+                foreach ($schemaColumns as $key => $colInfo) {
+                    // The snapshot may arrive as a name => metadata map or as a
+                    // flat list of column names; support both.
+                    if (is_array($colInfo)) {
+                        $colName = $colInfo['name'] ?? (string) $key;
+                        $type    = $colInfo['type'] ?? 'unknown';
+                    } else {
+                        $colName = is_string($colInfo) ? $colInfo : (string) $key;
+                        $type    = 'unknown';
+                    }
 
                     $columns[] = [
                         'name' => $colName,
                         'type' => $type,
-                        'isPrimary' => $isPrimary,
-                        'isForeign' => $isForeign,
+                        'isPrimary' => ($colName === 'id'),
+                        'isForeign' => (bool) preg_match('/_id$/', $colName),
                         'isMissing' => false,
                     ];
                 }

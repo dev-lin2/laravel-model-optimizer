@@ -173,6 +173,10 @@ php artisan model-analyzer:visualize
 | `--models=User,Post` | Comma-separated list of models to include |
 | `--erd` | Generate an Entity Relationship Diagram instead of a force-directed graph |
 | `--format=html` | Output format: `html` (interactive, D3.js) or `svg` (static, embeddable) |
+| `--source=database` | Schema source for ERDs: `database`, `migrations`, or `both` |
+| `--issues=all` | Which notices to print: `all`, `errors`, `warnings`, `none` |
+| `--hide-errors` | Never print error notices |
+| `--hide-warnings` | Never print warning notices |
 
 **Examples:**
 
@@ -191,11 +195,144 @@ php artisan model-analyzer:visualize --erd --format=svg --models=User,Post
 
 # Custom output path
 php artisan model-analyzer:visualize --format=svg --output=docs/models.svg
+
+# ERD built from migration files - no database connection needed
+php artisan model-analyzer:visualize --erd --source=migrations
+
+# ERD built from the live connection
+php artisan model-analyzer:visualize --erd --source=database
 ```
+
+**`--source` and the ERD.** Without `--source`, the ERD is model-driven and shows one box per
+Eloquent model. With `--source`, it becomes *table-first*: every table in the chosen schema
+appears, including pivots and tables with no model, and models decorate the tables they map to.
+`--source` applies to `--erd` only; the force-directed graph is always model-driven.
 
 **HTML format** produces a standalone file with D3.js — drag nodes, zoom, hover for details.
 
 **SVG format** produces a pure `<svg>` file with no JavaScript — lightweight, scalable, and works anywhere images are supported.
+
+---
+
+### `model-analyzer:docs`
+
+Generates a **data dictionary** — a reference describing the schema as it is: tables, columns,
+types, nullability, keys, indexes, foreign keys, and the Eloquent relationships of any model
+that maps to a table.
+
+```bash
+php artisan model-analyzer:docs
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--source=database` | Schema source: `database`, `migrations`, or `both` |
+| `--format=md` | Output format: `md` (Markdown) or `html` |
+| `--output=path` | Output file path (default: `schema-docs-<source>.<ext>`) |
+| `--models=User,Post` | Restrict model enrichment to these models |
+| `--issues=all` | Which notices to print: `all`, `errors`, `warnings`, `none` |
+| `--hide-errors` | Never print error notices |
+| `--hide-warnings` | Never print warning notices |
+
+**Examples:**
+
+```bash
+# Markdown data dictionary from the live database
+php artisan model-analyzer:docs --source=database
+
+# From migration files only - works with no database connection
+php artisan model-analyzer:docs --source=migrations --output=docs/schema.md
+
+# Styled HTML, light and dark aware
+php artisan model-analyzer:docs --format=html --output=public/schema.html
+```
+
+---
+
+### `model-analyzer:report`
+
+Reports **findings** rather than describing the schema: columns that should have a foreign key
+but don't, foreign key candidates with no supporting index, and drift between two sources.
+
+```bash
+php artisan model-analyzer:report
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--source=database` | Schema source: `database`, `migrations`, or `both` |
+| `--format=cli` | Output format: `cli`, `md`, `json`, or `html` |
+| `--output=path` | Write to a file instead of stdout |
+| `--issues=all` | Which notices to include: `all`, `errors`, `warnings`, `none` |
+| `--hide-errors` | Never include error notices |
+| `--hide-warnings` | Never include warning notices |
+| `--fail-on-findings` | Exit non-zero when findings exist (for CI) |
+
+**Examples:**
+
+```bash
+# Human-readable summary in the terminal
+php artisan model-analyzer:report
+
+# Compare migrations against the live database and show drift
+php artisan model-analyzer:report --source=both
+
+# Machine-readable output for tooling
+php artisan model-analyzer:report --format=json --output=build/schema.json
+
+# Gate a pipeline on findings (opt-in; exits 0 otherwise)
+php artisan model-analyzer:report --source=both --fail-on-findings
+```
+
+**Missing foreign key detection.** A column is reported when it looks like a foreign key
+(`*_id`) **and** a plausible target table actually exists **and** no constraint already covers
+it. Requiring the target to exist keeps false positives low: `logs.external_id` with no
+`externals` table is skipped. Polymorphic columns (a `*_id` paired with a `*_type`) are excluded
+by design, since they cannot carry a single-table constraint. Each finding includes the
+migration line that would fix it.
+
+---
+
+## Schema Sources
+
+Every schema-aware command accepts `--source`:
+
+| Value | Reads from | Needs a database? |
+|---|---|---|
+| `database` (default) | The live connection, via `information_schema` or `sqlite_master` | Yes |
+| `migrations` | Static parsing of your migration files — no code is executed | No |
+| `both` | Both of the above, and reports drift between them | Partially |
+
+`migrations` makes the whole toolset usable in CI and on a fresh checkout where no database has
+been provisioned.
+
+## Degraded Output, Never A Crash
+
+These commands are built not to break. A missing database connection, an absent migration
+directory, an unparseable migration, or an unwritable output path produces **empty or "missing"
+output plus a notice** — never an exception, and never a non-zero exit code unless you opt in
+with `--fail-on-findings`.
+
+Notice visibility is controlled per run:
+
+```bash
+# Everything (default)
+php artisan model-analyzer:report --issues=all
+
+# Errors only, or warnings only
+php artisan model-analyzer:report --issues=errors
+php artisan model-analyzer:report --issues=warnings
+
+# Silence notices entirely
+php artisan model-analyzer:report --issues=none
+
+# Or suppress one class at a time
+php artisan model-analyzer:report --hide-warnings
+```
 
 ---
 

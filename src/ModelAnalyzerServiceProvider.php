@@ -4,8 +4,10 @@ namespace Devlin\ModelAnalyzer;
 
 use Illuminate\Support\ServiceProvider;
 use Devlin\ModelAnalyzer\Commands\AnalyzeCommand;
+use Devlin\ModelAnalyzer\Commands\DocsCommand;
 use Devlin\ModelAnalyzer\Commands\HealthCommand;
 use Devlin\ModelAnalyzer\Commands\ListModelsCommand;
+use Devlin\ModelAnalyzer\Commands\ReportCommand;
 use Devlin\ModelAnalyzer\Commands\VisualizeCommand;
 
 class ModelAnalyzerServiceProvider extends ServiceProvider
@@ -46,6 +48,8 @@ class ModelAnalyzerServiceProvider extends ServiceProvider
                 HealthCommand::class,
                 ListModelsCommand::class,
                 VisualizeCommand::class,
+                DocsCommand::class,
+                ReportCommand::class,
             ]);
         }
     }

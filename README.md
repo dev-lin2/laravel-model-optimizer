@@ -6,9 +6,9 @@ A Laravel package that scans your Eloquent models and validates their relationsh
 
 | Dependency | Version |
 |---|---|
-| PHP | `^7.4` or `^8.0` |
-| Laravel / Illuminate | `^8.0` |
-| Symfony Finder | `^5.0` |
+| PHP | `^8.2` |
+| Laravel / Illuminate | `^12.0` |
+| Symfony Finder | `^7.0` |
 
 ## Installation
 

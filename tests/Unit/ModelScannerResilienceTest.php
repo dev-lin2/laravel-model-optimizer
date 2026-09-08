@@ -94,8 +94,11 @@ PHP
         $this->assertStringContainsString('Notifiable', $scanner->getWarnings()[0]);
     }
 
-    public function test_a_model_extending_a_missing_parent_is_skipped()
+    public function test_a_class_extending_a_missing_parent_is_skipped_silently()
     {
+        // An unresolvable parent means this cannot be an Eloquent model, so it
+        // is filtered out as "not a model" rather than reported as a broken
+        // one. What matters is that nothing fatals and nothing is loaded.
         $this->model('OrphanChild', <<<'PHP'
 namespace MaFixtureBroken;
 
@@ -108,7 +111,7 @@ PHP
         $scanner = new ModelScanner([$this->dir]);
 
         $this->assertSame([], $scanner->scan());
-        $this->assertNotEmpty($scanner->getWarnings());
+        $this->assertFalse(class_exists('MaFixtureBroken\OrphanChild', false));
     }
 
     public function test_a_model_implementing_a_missing_interface_is_skipped()
@@ -128,6 +131,109 @@ PHP
 
         $this->assertSame([], $scanner->scan());
         $this->assertNotEmpty($scanner->getWarnings());
+    }
+
+    public function test_two_files_declaring_the_same_class_do_not_cause_a_redeclare_fatal()
+    {
+        // Mirrors vendored libraries dropped into app/: two files that each
+        // declare the same exception class. Loading both is a fatal error.
+        $this->model('AnalyticsClient', <<<'PHP'
+namespace MaFixtureLib;
+
+class AnalyticsClient
+{
+}
+
+class ParseException extends \Exception
+{
+}
+PHP
+        );
+
+        $this->model('ReportClient', <<<'PHP'
+namespace MaFixtureLib;
+
+class ReportClient
+{
+}
+
+class ParseException extends \Exception
+{
+}
+PHP
+        );
+
+        $scanner = new ModelScanner([$this->dir]);
+
+        $this->assertSame([], $scanner->scan());
+    }
+
+    public function test_non_model_classes_are_never_loaded()
+    {
+        $this->model('PlainService', <<<'PHP'
+namespace MaFixtureLib;
+
+class PlainService
+{
+}
+PHP
+        );
+
+        $scanner = new ModelScanner([$this->dir]);
+
+        $this->assertSame([], $scanner->scan());
+        $this->assertFalse(
+            class_exists('MaFixtureLib\PlainService', false),
+            'A non-model class must not be autoloaded during scanning'
+        );
+    }
+
+    public function test_a_class_extending_a_non_model_base_is_not_loaded()
+    {
+        $this->model('SomeException', <<<'PHP'
+namespace MaFixtureLib;
+
+class SomeException extends \Exception
+{
+}
+PHP
+        );
+
+        $scanner = new ModelScanner([$this->dir]);
+
+        $this->assertSame([], $scanner->scan());
+        $this->assertFalse(
+            class_exists('MaFixtureLib\SomeException', false),
+            'A class extending Exception must not be autoloaded during scanning'
+        );
+    }
+
+    public function test_a_model_extending_a_local_base_model_is_discovered()
+    {
+        $this->model('BaseModel', <<<'PHP'
+namespace MaFixtureHealthy;
+
+use Illuminate\Database\Eloquent\Model;
+
+abstract class BaseModel extends Model
+{
+}
+PHP
+        );
+
+        $this->model('ChildModel', <<<'PHP'
+namespace MaFixtureHealthy;
+
+class ChildModel extends BaseModel
+{
+}
+PHP
+        );
+
+        $models = (new ModelScanner([$this->dir]))->scan();
+
+        $this->assertContains('MaFixtureHealthy\ChildModel', $models);
+        $this->assertNotContains('MaFixtureHealthy\BaseModel', $models, 'abstract bases are excluded');
     }
 
     public function test_a_healthy_model_is_still_discovered()

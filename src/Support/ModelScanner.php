@@ -41,6 +41,94 @@ class ModelScanner
         $models         = [];
         $this->warnings = [];
 
+        $candidates = $this->collectCandidates();
+        $parentMap  = [];
+
+        foreach ($candidates as $candidate) {
+            $parentMap[$candidate['class']] = $candidate['parent'];
+        }
+
+        foreach ($candidates as $candidate) {
+            $class = $candidate['class'];
+
+            if (in_array($class, $this->excludedModels, true)) {
+                continue;
+            }
+
+            // Decide whether this even looks like an Eloquent model using only
+            // static information. Application directories routinely contain
+            // vendored libraries and plain services; loading those is both
+            // wasteful and, as with duplicate class declarations, potentially
+            // fatal in a way no try/catch can intercept.
+            if (!$this->looksLikeModel($class, $parentMap)) {
+                continue;
+            }
+
+            // Loading a file that redeclares an already-declared symbol is an
+            // uncatchable fatal error.
+            $clash = $this->redeclaredSymbol($candidate);
+
+            if ($clash !== null) {
+                $this->warnings[] = sprintf(
+                    'Skipped %s: %s is already declared in %s.',
+                    $class,
+                    $clash['symbol'],
+                    $clash['declaredIn']
+                );
+
+                continue;
+            }
+
+            // Linking a class whose trait or parent is missing is likewise an
+            // uncatchable fatal, so this must happen before autoloading.
+            $missing = $this->unresolvableDependencies($candidate['path']);
+
+            if (count($missing) > 0) {
+                $this->warnings[] = sprintf(
+                    'Skipped %s: unresolved %s (%s). Fix the imports in %s.',
+                    $class,
+                    count($missing) === 1 ? 'dependency' : 'dependencies',
+                    implode(', ', $missing),
+                    basename($candidate['path'])
+                );
+
+                continue;
+            }
+
+            if (!$this->isEloquentModel($class)) {
+                continue;
+            }
+
+            $models[] = $class;
+        }
+
+        return array_values(array_unique($models));
+    }
+
+    /**
+     * Base classes that mark a class as an Eloquent model.
+     *
+     * @return string[]
+     */
+    protected function modelBaseClasses()
+    {
+        return [
+            'Illuminate\Database\Eloquent\Model',
+            'Illuminate\Database\Eloquent\Relations\Pivot',
+            'Illuminate\Database\Eloquent\Relations\MorphPivot',
+            'Illuminate\Foundation\Auth\User',
+        ];
+    }
+
+    /**
+     * Parse every candidate file once, without loading any of it.
+     *
+     * @return array[] Each: ['path', 'class', 'parent', 'symbols']
+     */
+    private function collectCandidates()
+    {
+        $candidates = [];
+
         foreach ($this->paths as $path) {
             if (!is_dir($path)) {
                 continue;
@@ -50,43 +138,258 @@ class ModelScanner
             $finder->files()->name('*.php')->in($path);
 
             foreach ($finder as $file) {
-                $class = $this->getClassFromFile($file->getRealPath());
+                $realPath = $file->getRealPath();
+                $contents = @file_get_contents($realPath);
 
-                if ($class === null) {
+                if ($contents === false) {
                     continue;
                 }
 
-                if (in_array($class, $this->excludedModels, true)) {
+                $parsed = $this->parseDeclarations($contents);
+
+                if (count($parsed['declarations']) === 0) {
                     continue;
                 }
 
-                // Resolve the class's traits, parent and interfaces WITHOUT
-                // loading it. Linking a class whose trait or parent is missing
-                // is an uncatchable fatal error, so this check must happen
-                // before class_exists() triggers autoloading.
-                $missing = $this->unresolvableDependencies($file->getRealPath());
+                $first = null;
+                $symbols = [];
 
-                if (count($missing) > 0) {
-                    $this->warnings[] = sprintf(
-                        'Skipped %s: unresolved %s (%s). Fix the imports in %s.',
-                        $class,
-                        count($missing) === 1 ? 'dependency' : 'dependencies',
-                        implode(', ', $missing),
-                        basename($file->getRealPath())
-                    );
+                foreach ($parsed['declarations'] as $declaration) {
+                    $fq        = $parsed['namespace'] !== ''
+                        ? $parsed['namespace'] . '\\' . $declaration['name']
+                        : $declaration['name'];
+                    $symbols[] = $fq;
 
+                    if ($first === null && $declaration['kind'] === 'class') {
+                        $first = [
+                            'class'  => $fq,
+                            'parent' => $declaration['parent'] === null
+                                ? null
+                                : $this->resolveName($declaration['parent'], $parsed['namespace'], $parsed['imports']),
+                        ];
+                    }
+                }
+
+                if ($first === null) {
                     continue;
                 }
 
-                if (!$this->isEloquentModel($class)) {
-                    continue;
-                }
-
-                $models[] = $class;
+                $candidates[] = [
+                    'path'    => $realPath,
+                    'class'   => $first['class'],
+                    'parent'  => $first['parent'],
+                    'symbols' => $symbols,
+                ];
             }
         }
 
-        return array_unique($models);
+        return $candidates;
+    }
+
+    /**
+     * Walk the statically-known parent chain looking for an Eloquent base.
+     *
+     * Only the parent class is ever loaded, and only when the chain leaves the
+     * set of scanned files — loading a single named base class is far safer
+     * than loading every file in an application directory.
+     *
+     * @param  string $class
+     * @param  array  $parentMap
+     * @return bool
+     */
+    protected function looksLikeModel($class, array $parentMap)
+    {
+        $bases   = $this->modelBaseClasses();
+        $seen    = [];
+        $current = $class;
+
+        for ($depth = 0; $depth < 20; $depth++) {
+            if ($current === null || isset($seen[$current])) {
+                return false;
+            }
+
+            $seen[$current] = true;
+
+            $parent = isset($parentMap[$current]) ? $parentMap[$current] : null;
+
+            if ($parent === null) {
+                // Chain ends inside the scanned set without reaching a base.
+                return false;
+            }
+
+            if (in_array($parent, $bases, true)) {
+                return true;
+            }
+
+            if (!array_key_exists($parent, $parentMap)) {
+                // External parent: resolve it directly.
+                return $this->isModelSubclass($parent);
+            }
+
+            $current = $parent;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  string $class
+     * @return bool
+     */
+    private function isModelSubclass($class)
+    {
+        try {
+            if (!class_exists($class)) {
+                return false;
+            }
+
+            return is_subclass_of($class, Model::class) || $class === Model::class;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Detect a symbol in this file that is already declared elsewhere.
+     *
+     * @param  array $candidate
+     * @return array|null ['symbol' => string, 'declaredIn' => string]
+     */
+    protected function redeclaredSymbol(array $candidate)
+    {
+        foreach ($candidate['symbols'] as $symbol) {
+            // No autoload: this only reports what is ALREADY in memory.
+            $exists = class_exists($symbol, false)
+                || interface_exists($symbol, false)
+                || trait_exists($symbol, false);
+
+            if (!$exists) {
+                continue;
+            }
+
+            try {
+                $declaredIn = (new \ReflectionClass($symbol))->getFileName();
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if ($declaredIn === false || $declaredIn === null) {
+                continue;
+            }
+
+            if (realpath($declaredIn) !== realpath($candidate['path'])) {
+                return [
+                    'symbol'     => $symbol,
+                    'declaredIn' => basename($declaredIn),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every class-like declaration in a source file, with its parent.
+     *
+     * @param  string $contents
+     * @return array{namespace: string, imports: array, declarations: array[]}
+     */
+    protected function parseDeclarations($contents)
+    {
+        $tokens = token_get_all($contents);
+        $count  = count($tokens);
+
+        $namespace    = '';
+        $imports      = [];
+        $declarations = [];
+        $depth        = 0;
+
+        $kinds = [T_CLASS => 'class', T_INTERFACE => 'interface', T_TRAIT => 'trait'];
+
+        if (defined('T_ENUM')) {
+            $kinds[constant('T_ENUM')] = 'enum';
+        }
+
+        for ($i = 0; $i < $count; $i++) {
+            $token = $tokens[$i];
+
+            if (!is_array($token)) {
+                if ($token === '{') {
+                    $depth++;
+                } elseif ($token === '}') {
+                    $depth--;
+                }
+                continue;
+            }
+
+            if ($token[0] === T_NAMESPACE) {
+                $namespace = $this->readName($tokens, $i + 1, $count);
+                continue;
+            }
+
+            if ($token[0] === T_USE && $depth === 0) {
+                $this->readImports($tokens, $i + 1, $count, $imports);
+                continue;
+            }
+
+            if (!isset($kinds[$token[0]])) {
+                continue;
+            }
+
+            // Skip ::class constants and anonymous classes.
+            if ($i >= 1 && is_array($tokens[$i - 1]) && $tokens[$i - 1][0] === T_DOUBLE_COLON) {
+                continue;
+            }
+
+            $name = $this->readName($tokens, $i + 1, $count);
+
+            if ($name === '') {
+                continue;
+            }
+
+            $declarations[] = [
+                'kind'   => $kinds[$token[0]],
+                'name'   => $name,
+                'parent' => $this->readExtendsBeforeBody($tokens, $i + 1, $count),
+            ];
+        }
+
+        return [
+            'namespace'    => $namespace,
+            'imports'      => $imports,
+            'declarations' => $declarations,
+        ];
+    }
+
+    /**
+     * Read the `extends` name of the declaration starting at $start, stopping
+     * at the opening brace of the class body.
+     *
+     * @param  array $tokens
+     * @param  int   $start
+     * @param  int   $count
+     * @return string|null
+     */
+    private function readExtendsBeforeBody(array $tokens, $start, $count)
+    {
+        for ($i = $start; $i < $count; $i++) {
+            $token = $tokens[$i];
+
+            if (!is_array($token)) {
+                if ($token === '{' || $token === ';') {
+                    return null;
+                }
+                continue;
+            }
+
+            if ($token[0] === T_EXTENDS) {
+                $names = $this->readNameList($tokens, $i + 1, $count);
+
+                return count($names) > 0 ? $names[0] : null;
+            }
+        }
+
+        return null;
     }
 
     /**

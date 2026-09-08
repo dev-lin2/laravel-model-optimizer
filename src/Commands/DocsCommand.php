@@ -27,7 +27,8 @@ class DocsCommand extends Command
                             {--style=table     : Presentation: table (data dictionary) or prose (definitions)}
                             {--output=         : Output file path}
                             {--models=         : Comma-separated list of model names to include}
-                            {--no-models       : Skip Eloquent model discovery entirely (never loads app classes)}
+                            {--no-models       : Pure schema output: no model names or relationships, and app classes are never loaded}
+                            {--schema-only     : Alias for --no-models}
                             {--issues=all      : Which notices to print: all, errors, warnings, none}
                             {--hide-errors     : Never print error notices}
                             {--hide-warnings   : Never print warning notices}';
@@ -67,7 +68,9 @@ class DocsCommand extends Command
             $this->warnIssue('No schema source was readable; writing an empty document.');
         }
 
-        $models = $this->option('no-models')
+        $schemaOnly = $this->option('no-models') || $this->option('schema-only');
+
+        $models = $schemaOnly
             ? []
             : ModelMapBuilder::build($analyzer, $this->parseCommaSeparated($this->option('models')));
 
@@ -87,8 +90,8 @@ class DocsCommand extends Command
         }
 
         $generator = $style === 'prose'
-            ? new DefinitionsGenerator($models)
-            : new DocsGenerator($models);
+            ? new DefinitionsGenerator($models, !$schemaOnly)
+            : new DocsGenerator($models, !$schemaOnly);
 
         $content = $format === 'html'
             ? $generator->generateHtml($primary)
@@ -108,12 +111,14 @@ class DocsCommand extends Command
 
         $this->newLine();
         $this->info('Documentation written: ' . $path);
-        $this->line(sprintf(
-            '  source: %s, %d tables, %d models matched',
-            $primary->source,
-            count($primary->tables),
-            count(array_intersect(array_keys($models), $primary->tableNames()))
-        ));
+        $this->line($schemaOnly
+            ? sprintf('  source: %s, %d tables (schema only)', $primary->source, count($primary->tables))
+            : sprintf(
+                '  source: %s, %d tables, %d models matched',
+                $primary->source,
+                count($primary->tables),
+                count(array_intersect(array_keys($models), $primary->tableNames()))
+            ));
         $this->newLine();
 
         return 0;

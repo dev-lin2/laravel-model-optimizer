@@ -51,7 +51,7 @@ class DefinitionsGeneratorTest extends TestCase
         $md = (new DefinitionsGenerator())->generateMarkdown($this->snapshot());
 
         $this->assertStringContainsString('# Table Definitions', $md);
-        $this->assertStringContainsString('It holds 4 columns, keyed by `id`.', $md);
+        $this->assertStringContainsString('`users` holds 4 columns, keyed by `id`.', $md);
     }
 
     public function test_it_names_the_model_when_one_maps_to_the_table()
@@ -63,7 +63,9 @@ class DefinitionsGeneratorTest extends TestCase
         $md = $generator->generateMarkdown($this->snapshot());
 
         $this->assertStringContainsString('`orders` is backed by the `App\Models\Order` model.', $md);
-        $this->assertStringContainsString('`users` has no Eloquent model', $md);
+        // A table with no model says nothing about models at all.
+        $this->assertStringContainsString('`users` holds 4 columns', $md);
+        $this->assertStringNotContainsString('has no Eloquent model', $md);
     }
 
     public function test_it_describes_outgoing_references_and_marks_nullable_ones_optional()
@@ -139,7 +141,25 @@ class DefinitionsGeneratorTest extends TestCase
 
         // Nullability is unknown, so no "Required values" claim may appear.
         $this->assertStringNotContainsString('Required values', $md);
-        $this->assertStringContainsString('It holds 2 columns, keyed by `id`.', $md);
+        $this->assertStringContainsString('`notes` holds 2 columns, keyed by `id`.', $md);
+    }
+
+    public function test_model_output_can_be_suppressed_entirely()
+    {
+        $generator = new DefinitionsGenerator([
+            'orders' => [
+                'model'         => 'App\Models\Order',
+                'short_name'    => 'Order',
+                'relationships' => [['method' => 'user', 'type' => 'BelongsTo', 'related' => 'X']],
+            ],
+        ], false);
+
+        $md = $generator->generateMarkdown($this->snapshot());
+
+        $this->assertStringNotContainsString('App\Models\Order', $md);
+        $this->assertStringNotContainsString('model', strtolower($md));
+        // Schema facts survive.
+        $this->assertStringContainsString('references one `users` record via `user_id`', $md);
     }
 
     public function test_an_unavailable_snapshot_renders_a_notice_not_an_error()

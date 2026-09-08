@@ -302,9 +302,9 @@ class SchemaSourceCommandsTest extends TestCase
 
         $content = file_get_contents($path);
 
-        // Tables still render; only the model enrichment is absent.
+        // Tables still render; model content is absent entirely.
         $this->assertStringContainsString('users', $content);
-        $this->assertStringContainsString('_none discovered_', $content);
+        $this->assertStringNotContainsString('**Model:**', $content);
     }
 
     public function test_no_models_works_for_the_erd()
@@ -381,6 +381,77 @@ class SchemaSourceCommandsTest extends TestCase
         $this->assertSame(0, $exit);
         $this->assertStringContainsString('Unknown --style', $output);
         $this->assertStringContainsString('| Column | Type |', file_get_contents($path));
+    }
+
+    public function test_schema_only_output_never_mentions_models()
+    {
+        $path = $this->out . '/schema-only.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source'    => 'database',
+            '--no-models' => true,
+            '--output'    => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+
+        $content = file_get_contents($path);
+
+        // Everything the schema knows must still be there...
+        $this->assertStringContainsString('| Column | Type | Nullable | Key | Default | References |', $content);
+        $this->assertStringContainsString('users', $content);
+
+        // ...and nothing about models may appear.
+        $this->assertStringNotContainsString('**Model:**', $content);
+        $this->assertStringNotContainsString('none discovered', $content);
+        $this->assertStringNotContainsString('**Relationships**', $content);
+    }
+
+    public function test_schema_only_alias_behaves_the_same()
+    {
+        $path = $this->out . '/schema-only-alias.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source'      => 'database',
+            '--schema-only' => true,
+            '--output'      => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringNotContainsString('**Model:**', file_get_contents($path));
+    }
+
+    public function test_schema_only_prose_never_mentions_models()
+    {
+        $path = $this->out . '/schema-only-prose.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source'    => 'database',
+            '--style'     => 'prose',
+            '--no-models' => true,
+            '--output'    => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+
+        $content = file_get_contents($path);
+
+        $this->assertStringNotContainsString('model', strtolower($content));
+        $this->assertStringContainsString('holds', $content);
+    }
+
+    public function test_tables_without_a_model_omit_the_model_line_entirely()
+    {
+        $path = $this->out . '/no-model-line.md';
+
+        // Default run (models enabled): tables that have no model must simply
+        // not carry a Model line, rather than announcing its absence.
+        $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source' => 'database',
+            '--output' => $path,
+        ]);
+
+        $this->assertStringNotContainsString('none discovered', file_get_contents($path));
     }
 
     public function test_fail_on_findings_is_opt_in()

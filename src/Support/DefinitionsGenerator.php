@@ -25,12 +25,17 @@ class DefinitionsGenerator
      */
     private $models;
 
+    /** @var bool Whether model names and relationships may appear at all */
+    private $includeModels;
+
     /**
      * @param array<string, array> $modelsByTable
+     * @param bool                 $includeModels Set false for a pure schema document
      */
-    public function __construct(array $modelsByTable = [])
+    public function __construct(array $modelsByTable = [], $includeModels = true)
     {
-        $this->models = $modelsByTable;
+        $this->models        = $modelsByTable;
+        $this->includeModels = (bool) $includeModels;
     }
 
     /**
@@ -186,17 +191,15 @@ class DefinitionsGenerator
         $count   = count($columns);
         $primary = $this->primaryKey($columns);
 
-        $model = isset($this->models[$table]['model']) ? $this->models[$table]['model'] : null;
+        $model = $this->includeModels && isset($this->models[$table]['model'])
+            ? $this->models[$table]['model']
+            : null;
 
+        // Say nothing about models when there is none, or when model output is
+        // suppressed: this document describes the schema, not the code.
         $sentence = $model !== null
-            ? sprintf('`%s` is backed by the `%s` model.', $table, $model)
-            : sprintf('`%s` has no Eloquent model in the scanned paths.', $table);
-
-        $sentence .= sprintf(
-            ' It holds %d %s',
-            $count,
-            $count === 1 ? 'column' : 'columns'
-        );
+            ? sprintf('`%s` is backed by the `%s` model. It holds %d %s', $table, $model, $count, $count === 1 ? 'column' : 'columns')
+            : sprintf('`%s` holds %d %s', $table, $count, $count === 1 ? 'column' : 'columns');
 
         $sentence .= $primary !== null
             ? sprintf(', keyed by `%s`.', $primary)
@@ -383,7 +386,7 @@ class DefinitionsGenerator
      */
     private function relationshipSentence($table)
     {
-        $relationships = isset($this->models[$table]['relationships'])
+        $relationships = $this->includeModels && isset($this->models[$table]['relationships'])
             ? $this->models[$table]['relationships']
             : [];
 

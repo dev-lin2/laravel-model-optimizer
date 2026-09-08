@@ -24,12 +24,17 @@ class DocsGenerator
      */
     private $models;
 
+    /** @var bool Whether model names and relationships may appear at all */
+    private $includeModels;
+
     /**
      * @param array<string, array> $modelsByTable Optional model enrichment
+     * @param bool                 $includeModels Set false for a pure schema document
      */
-    public function __construct(array $modelsByTable = [])
+    public function __construct(array $modelsByTable = [], $includeModels = true)
     {
-        $this->models = $modelsByTable;
+        $this->models        = $modelsByTable;
+        $this->includeModels = (bool) $includeModels;
     }
 
     /**
@@ -95,11 +100,16 @@ class DocsGenerator
         $lines[] = '## ' . $table;
         $lines[] = '';
 
-        $model = isset($this->models[$table]['model']) ? $this->models[$table]['model'] : null;
-        $lines[] = $model !== null
-            ? sprintf('**Model:** `%s`', $model)
-            : '**Model:** _none discovered_';
-        $lines[] = '';
+        $model = $this->includeModels && isset($this->models[$table]['model'])
+            ? $this->models[$table]['model']
+            : null;
+
+        // Omit the line entirely when there is no model, rather than stating
+        // its absence: this document describes the schema, not the code.
+        if ($model !== null) {
+            $lines[] = sprintf('**Model:** `%s`', $model);
+            $lines[] = '';
+        }
 
         $columns = $snapshot->columns($table);
 
@@ -156,7 +166,7 @@ class DocsGenerator
             $lines[] = '';
         }
 
-        $relationships = isset($this->models[$table]['relationships'])
+        $relationships = $this->includeModels && isset($this->models[$table]['relationships'])
             ? $this->models[$table]['relationships']
             : [];
 
@@ -228,16 +238,17 @@ class DocsGenerator
      */
     private function htmlTable(SchemaSnapshot $snapshot, $table)
     {
-        $model = isset($this->models[$table]['model'])
-            ? '<code>' . $this->escape($this->models[$table]['model']) . '</code>'
-            : '<em>none discovered</em>';
-
-        $html  = sprintf(
-            '<section id="%s"><h2>%s</h2><p class="model">Model: %s</p>',
+        $html = sprintf(
+            '<section id="%s"><h2>%s</h2>',
             $this->escape($this->anchor($table)),
-            $this->escape($table),
-            $model
+            $this->escape($table)
         );
+
+        if ($this->includeModels && isset($this->models[$table]['model'])) {
+            $html .= '<p class="model">Model: <code>'
+                . $this->escape($this->models[$table]['model'])
+                . '</code></p>';
+        }
 
         $columns = $snapshot->columns($table);
 
@@ -291,7 +302,7 @@ class DocsGenerator
             $html .= '</ul>';
         }
 
-        $relationships = isset($this->models[$table]['relationships'])
+        $relationships = $this->includeModels && isset($this->models[$table]['relationships'])
             ? $this->models[$table]['relationships']
             : [];
 

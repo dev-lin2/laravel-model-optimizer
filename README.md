@@ -177,7 +177,8 @@ php artisan model-analyzer:visualize
 | `--erd` | Generate an Entity Relationship Diagram instead of a force-directed graph |
 | `--format=html` | Output format: `html` (interactive, D3.js) or `svg` (static, embeddable) |
 | `--source=database` | Schema source for ERDs: `database`, `migrations`, or `both` |
-| `--no-models` | Skip Eloquent model discovery entirely — never loads your app's classes |
+| `--no-models` | Pure schema output: no model names or relationships, and app classes are never loaded |
+| `--schema-only` | Alias for `--no-models` |
 | `--issues=all` | Which notices to print: `all`, `errors`, `warnings`, `none` |
 | `--hide-errors` | Never print error notices |
 | `--hide-warnings` | Never print warning notices |
@@ -256,7 +257,34 @@ php artisan model-analyzer:docs --format=html --output=public/schema.html
 
 # Prose definitions instead of column tables
 php artisan model-analyzer:docs --style=prose --output=docs/definitions.md
+
+# Pure schema: tables, columns, keys and indexes only - nothing about models
+php artisan model-analyzer:docs --schema-only --output=docs/schema.md
 ```
+
+#### Schema-only output
+
+`--schema-only` (or `--no-models`) produces a document about the database and nothing else:
+table names, column details, key references and indexes, with no model names and no Eloquent
+relationships. Application classes are never loaded, which also makes it immune to broken
+classes in `app/`.
+
+```markdown
+## orders
+
+| Column | Type | Nullable | Key | Default | References |
+|---|---|---|---|---|---|
+| `id` | bigint unsigned | no | PRI | — | — |
+| `user_id` | bigint unsigned | no | — | — | `users.id` |
+| `coupon_id` | bigint unsigned | yes | — | — | — |
+
+**Indexes**
+
+- `orders_user_id_index` (user_id)
+```
+
+Tables that simply have no model never carry a model line either — their absence is not
+announced.
 
 #### Two presentations
 

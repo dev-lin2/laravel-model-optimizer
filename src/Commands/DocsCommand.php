@@ -25,6 +25,7 @@ class DocsCommand extends Command
                             {--format=md       : Output format: md or html}
                             {--output=         : Output file path}
                             {--models=         : Comma-separated list of model names to include}
+                            {--no-models       : Skip Eloquent model discovery entirely (never loads app classes)}
                             {--issues=all      : Which notices to print: all, errors, warnings, none}
                             {--hide-errors     : Never print error notices}
                             {--hide-warnings   : Never print warning notices}';
@@ -64,7 +65,9 @@ class DocsCommand extends Command
             $this->warnIssue('No schema source was readable; writing an empty document.');
         }
 
-        $models = ModelMapBuilder::build($analyzer, $this->parseCommaSeparated($this->option('models')));
+        $models = $this->option('no-models')
+            ? []
+            : ModelMapBuilder::build($analyzer, $this->parseCommaSeparated($this->option('models')));
 
         $generator = new DocsGenerator($models);
         $content   = $format === 'html'

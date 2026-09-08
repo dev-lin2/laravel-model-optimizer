@@ -60,6 +60,17 @@ class ModelAnalyzer
 
         $classes = $scanner->scan();
 
+        foreach ($scanner->getWarnings() as $warning) {
+            $result->addIssue(new Issue(
+                'model_skipped',
+                'warning',
+                'system',
+                $warning,
+                'This model could not be loaded safely and was excluded from the analysis.',
+                []
+            ));
+        }
+
         // Optional filter
         if ($onlyModels !== null && count($onlyModels) > 0) {
             $classes = $this->filterClasses($classes, $onlyModels);

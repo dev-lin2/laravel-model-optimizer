@@ -177,6 +177,7 @@ php artisan model-analyzer:visualize
 | `--erd` | Generate an Entity Relationship Diagram instead of a force-directed graph |
 | `--format=html` | Output format: `html` (interactive, D3.js) or `svg` (static, embeddable) |
 | `--source=database` | Schema source for ERDs: `database`, `migrations`, or `both` |
+| `--no-models` | Skip Eloquent model discovery entirely — never loads your app's classes |
 | `--issues=all` | Which notices to print: `all`, `errors`, `warnings`, `none` |
 | `--hide-errors` | Never print error notices |
 | `--hide-warnings` | Never print warning notices |
@@ -235,6 +236,7 @@ php artisan model-analyzer:docs
 | `--format=md` | Output format: `md` (Markdown) or `html` |
 | `--output=path` | Output file path (default: `schema-docs-<source>.<ext>`) |
 | `--models=User,Post` | Restrict model enrichment to these models |
+| `--no-models` | Skip Eloquent model discovery entirely — never loads your app's classes |
 | `--issues=all` | Which notices to print: `all`, `errors`, `warnings`, `none` |
 | `--hide-errors` | Never print error notices |
 | `--hide-warnings` | Never print warning notices |
@@ -319,6 +321,33 @@ These commands are built not to break. A missing database connection, an absent 
 directory, an unparseable migration, or an unwritable output path produces **empty or "missing"
 output plus a notice** — never an exception, and never a non-zero exit code unless you opt in
 with `--fail-on-findings`.
+
+### Broken models in your app
+
+Model discovery has to let PHP load your model classes, and a class whose trait, parent or
+interface cannot be resolved raises an **uncatchable fatal error** when PHP links it — no
+`try`/`catch` can intercept that. So the scanner resolves each model's traits, parent and
+interfaces *statically* first, and skips any model that would not link, reporting it as a
+warning:
+
+```
+warning Skipped App\Admin: unresolved dependency (Notifiable). Fix the imports in Admin.php.
+```
+
+Your schema output is unaffected — only that one model's enrichment is missing.
+
+If you would rather not touch application classes at all, `--no-models` skips discovery
+entirely. Schema output is identical; tables simply render without model names or Eloquent
+relationships:
+
+```bash
+php artisan model-analyzer:docs --source=database --no-models
+php artisan model-analyzer:visualize --erd --source=database --no-models
+```
+
+One limit worth knowing: if a *parent* class has the broken dependency, the static check
+resolves the parent's name successfully and the fatal moves one level up. Deeply broken class
+chains are not fully protected — use `--no-models` there.
 
 Notice visibility is controlled per run:
 

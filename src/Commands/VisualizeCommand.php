@@ -26,6 +26,7 @@ class VisualizeCommand extends Command
                             {--erd : Generate an Entity Relationship Diagram instead of a force-directed graph}
                             {--format=html : Output format (html or svg)}
                             {--source=  : Schema source for ERDs: database, migrations, or both}
+                            {--no-models : Skip Eloquent model discovery entirely (never loads app classes)}
                             {--issues=all : Which notices to print: all, errors, warnings, none}
                             {--hide-errors : Never print error notices}
                             {--hide-warnings : Never print warning notices}';
@@ -147,7 +148,9 @@ class VisualizeCommand extends Command
             $this->warnIssue('The selected schema source contains no tables; generating an empty diagram.');
         }
 
-        $models = ModelMapBuilder::build($analyzer, $onlyModels ?: null);
+        $models = $this->option('no-models')
+            ? []
+            : ModelMapBuilder::build($analyzer, $onlyModels ?: null);
 
         $generator = $format === 'svg' ? new SvgErdGenerator() : new ErdGenerator();
 

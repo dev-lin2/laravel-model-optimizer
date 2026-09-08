@@ -288,6 +288,40 @@ class SchemaSourceCommandsTest extends TestCase
         $this->assertStringNotContainsString('None of the configured migration paths exist', $output);
     }
 
+    public function test_no_models_still_produces_full_schema_output()
+    {
+        $path = $this->out . '/no-models.md';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:docs', [
+            '--source'    => 'database',
+            '--no-models' => true,
+            '--output'    => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+
+        $content = file_get_contents($path);
+
+        // Tables still render; only the model enrichment is absent.
+        $this->assertStringContainsString('users', $content);
+        $this->assertStringContainsString('_none discovered_', $content);
+    }
+
+    public function test_no_models_works_for_the_erd()
+    {
+        $path = $this->out . '/erd-no-models.html';
+
+        [$exit] = $this->captureArtisanOutput('model-analyzer:visualize', [
+            '--erd'       => true,
+            '--source'    => 'database',
+            '--no-models' => true,
+            '--output'    => $path,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('"tableName": "users"', file_get_contents($path));
+    }
+
     public function test_fail_on_findings_is_opt_in()
     {
         [$default] = $this->captureArtisanOutput('model-analyzer:report', [
